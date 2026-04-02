@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Quality Checker</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #ffffff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+        }
+
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 16px;
+            font-size: 1.4rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 8px;
+        }
+
+        .card h3 {
+            color: #444;
+            margin: 16px 0 12px 0;
+            font-size: 1.1rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .task-select {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            cursor: pointer;
+        }
+
+        .task-select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .expected-sounds {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .expected-sounds ul {
+            margin-left: 20px;
+            color: #666;
+        }
+
+        .record-btn {
+            width: 100%;
+            padding: 16px 32px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 16px;
+        }
+
+        .record-btn.ready {
+            background: #667eea;
+            color: white;
+        }
+
+        .record-btn.recording {
+            background: #e74c3c;
+            color: white;
+            animation: pulse 1s infinite;
+        }
+
+        .record-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .record-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .file-upload {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        .file-upload:hover {
+            border-color: #667eea;
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
+        audio {
+            width: 100%;
+            margin-top: 12px;
+        }
+
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            margin: 12px 0;
+            font-weight: 500;
+        }
+
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin: 16px 0;
+        }
+
+        .metric {
+            background: #f8f9fa;
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .metric-label {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 4px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 12px;
+            background: #e9ecef;
+            border-radius: 6px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 6px;
+            transition: width 0.5s ease;
+        }
+
+        .progress-fill.warning {
+            background: linear-gradient(90deg, #f39c12, #e74c3c);
+        }
+
+        .detection-result {
+            padding: 16px;
+            border-radius: 8px;
+            margin: 12px 0;
+        }
+
+        .detection-result.detected {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+        }
+
+        .detection-result.not-detected {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+        }
+
+        .sound-list {
+            margin-top: 12px;
+        }
+
+        .sound-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            gap: 12px;
+        }
+
+        .sound-item .name {
+            min-width: 150px;
+            font-weight: 500;
+        }
+
+        .sound-item .bar {
+            flex: 1;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .sound-item .bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 4px;
+        }
+
+        .sound-item .score {
+            min-width: 50px;
+            text-align: right;
+            color: #666;
+        }
+
+        .issues-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .issues-list li {
+            padding: 8px 12px;
+            background: #fff3cd;
+            border-radius: 4px;
+            margin: 4px 0;
+            color: #856404;
+        }
+
+        .issues-list li::before {
+            content: "⚠ ";
+        }
+
+        #pieChart {
+            width: 100%;
+            height: 350px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .frame-row {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9rem;
+        }
+
+        .frame-row:nth-child(odd) {
+            background: #f8f9fa;
+        }
+
+        .frame-number {
+            min-width: 70px;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .frame-sounds {
+            flex: 1;
+        }
+
+        .frame-sound-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            margin: 2px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            background: #e9ecef;
+        }
+
+        .frame-sound-tag.task-sound {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .frame-sound-tag.overlap-sound {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .overlap-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: #fff3cd;
+            border-radius: 4px;
+            margin: 4px 0;
+        }
+
+        .purity-good { color: #28a745; }
+        .purity-medium { color: #ffc107; }
+        .purity-poor { color: #dc3545; }
+
+        .device-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .device-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .device-item .label {
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .device-item .value {
+            font-weight: 600;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Audio Quality Checker</h1>
+        <p class="subtitle">Record audio and analyze its quality using YAMNet AI model</p>
+
+        <div id="modelStatus" class="status loading">Loading YAMNet model...</div>
+
+        <!-- Device Information -->
+        <div class="card">
+            <h2>Device Information</h2>
+            <div class="device-info" id="deviceInfo">
+                <div class="device-item">
+                    <div class="label">Browser</div>
+                    <div class="value" id="browserInfo">Detecting...</div>
+                </div>
+                <div class="device-item">
+                    <div class="label">Operating System</div>
+                    <div class="value" id="osInfo">Detecting...</div>
+                </div>
+                <div class="device-item">
+                    <div class="label">Screen Resolution</div>
+                    <div class="value" id="screenInfo">Detecting...</div>
+                </div>
+                <div class="device-item">
+                    <div class="label">Language</div>
+                    <div class="value" id="langInfo">Detecting...</div>
+                </div>
+                <div class="device-item">
+                    <div class="label">CPU Cores</div>
+                    <div class="value" id="coresInfo">Detecting...</div>
+                </div>
+                <div class="device-item">
+                    <div class="label">Microphone</div>
+                    <div class="value" id="micInfo">Detecting...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <!-- Left Column: Recording -->
+            <div class="card">
+                <h2>Record Audio</h2>
+
+                <label for="taskSelect"><strong>Select Task:</strong></label>
+                <select id="taskSelect" class="task-select">
+                    <option value="Breathing">Breathing</option>
+                    <option value="Cough">Cough</option>
+                    <option value="Vowel">Vowel</option>
+                    <option value="Speech">Speech</option>
+                </select>
+
+                <div class="expected-sounds">
+                    <strong>Expected sounds:</strong>
+                    <ul id="expectedSounds"></ul>
+                </div>
+
+                <button id="recordBtn" class="record-btn ready" disabled>
+                    Loading Model...
+                </button>
+
+                <div id="recordingTime" class="hidden">
+                    Recording: <span id="timeDisplay">0:00</span>
+                </div>
+
+                <h3>Or upload an audio file:</h3>
+                <div class="file-upload" onclick="document.getElementById('fileInput').click()">
+                    <p>Click to upload WAV, MP3, OGG, or FLAC</p>
+                    <input type="file" id="fileInput" accept=".wav,.mp3,.ogg,.flac,audio/*">
+                </div>
+
+                <audio id="audioPlayer" controls class="hidden"></audio>
+            </div>
+
+            <!-- Right Column: Results -->
+            <div class="card">
+                <h2>Analysis Results</h2>
+
+                <div id="resultsPlaceholder" class="status info">
+                    Record or upload audio to see analysis results
+                </div>
+
+                <div id="resultsContent" class="hidden">
+                    <!-- Audio Info -->
+                    <h3>Audio Information</h3>
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <div class="metric-value" id="duration">--</div>
+                            <div class="metric-label">Duration (sec)</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value" id="sampleRate">--</div>
+                            <div class="metric-label">Sample Rate (Hz)</div>
+                        </div>
+                    </div>
+
+                    <!-- Task Detection -->
+                    <h3>Task Detection: <span id="taskName"></span></h3>
+                    <div id="detectionResult" class="detection-result">
+                        <div id="detectionText"></div>
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <div class="metric-value" id="confidence">--</div>
+                                <div class="metric-label">Confidence</div>
+                            </div>
+                        </div>
+                        <div id="detectedSounds" class="sound-list"></div>
+                    </div>
+
+                    <!-- Task Purity Score -->
+                    <h3>Task Purity</h3>
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <div class="metric-value" id="purityScore">--</div>
+                            <div class="metric-label">Purity Score</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value" id="taskFrames">--</div>
+                            <div class="metric-label">Frames with Task Audio</div>
+                        </div>
+                    </div>
+                    <div id="purityExplanation"></div>
+
+                    <!-- Overlapping Sounds -->
+                    <h3>Overlapping Sounds Detected</h3>
+                    <div id="overlappingSounds"></div>
+
+                    <!-- Frame Timeline -->
+                    <h3>Frame-by-Frame Analysis</h3>
+                    <div id="frameTimeline" style="max-height: 300px; overflow-y: auto;"></div>
+
+                    <!-- Top 10 Detected Sounds -->
+                    <h3>Top 10 Detected Sounds</h3>
+                    <div id="pieChart"></div>
+                    <div id="topSounds" class="sound-list"></div>
+
+                    <!-- Overall Assessment -->
+                    <h3>Overall Assessment</h3>
+                    <div id="overallAssessment"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Task classes mapping
+        const TASK_CLASSES = {
+            "Breathing": ["Breathing", "Wheeze", "Gasp", "Pant", "Snort", "Snoring"],
+            "Cough": ["Cough", "Throat clearing", "Sneeze"],
+            "Vowel": ["Speech", "Singing", "Humming", "Mantra", "Chant"],
+            "Speech": ["Speech", "Child speech, kid speaking", "Conversation", "Narration, monologue", "Whispering"]
+        };
+
+        const NOISE_CLASSES = [
+            "Noise", "Environmental noise", "Static", "Hum", "Buzz",
+            "Reverberation", "Echo", "White noise", "Pink noise"
+        ];
+
+        const YAMNET_SAMPLE_RATE = 16000;
+
+        let yamnetModel = null;
+        let classNames = {};
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+        let recordingStartTime = null;
+        let timerInterval = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            detectDeviceInfo();
+            updateExpectedSounds();
+            await loadModel();
+            setupEventListeners();
+        });
+
+        // Detect device information
+        async function detectDeviceInfo() {
+            const ua = navigator.userAgent;
+
+            // Browser detection
+            let browser = 'Unknown';
+            if (ua.includes('Chrome') && !ua.includes('Edg')) {
+                browser = 'Chrome ' + (ua.match(/Chrome\/(\d+)/)?.[1] || '');
+            } else if (ua.includes('Firefox')) {
+                browser = 'Firefox ' + (ua.match(/Firefox\/(\d+)/)?.[1] || '');
+            } else if (ua.includes('Safari') && !ua.includes('Chrome')) {
+                browser = 'Safari ' + (ua.match(/Version\/(\d+)/)?.[1] || '');
+            } else if (ua.includes('Edg')) {
+                browser = 'Edge ' + (ua.match(/Edg\/(\d+)/)?.[1] || '');
+            }
+            document.getElementById('browserInfo').textContent = browser;
+
+            // OS detection
+            let os = 'Unknown';
+            if (ua.includes('Windows NT 10')) os = 'Windows 10/11';
+            else if (ua.includes('Windows')) os = 'Windows';
+            else if (ua.includes('Mac OS X')) {
+                const version = ua.match(/Mac OS X ([\d_]+)/)?.[1]?.replace(/_/g, '.') || '';
+                os = 'macOS ' + version;
+            }
+            else if (ua.includes('Linux')) os = 'Linux';
+            else if (ua.includes('Android')) os = 'Android';
+            else if (ua.includes('iOS') || ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+            document.getElementById('osInfo').textContent = os;
+
+            // Screen
+            document.getElementById('screenInfo').textContent = `${screen.width} x ${screen.height}`;
+
+            // Language
+            document.getElementById('langInfo').textContent = navigator.language;
+
+            // CPU Cores
+            document.getElementById('coresInfo').textContent = navigator.hardwareConcurrency || 'Unknown';
+
+            // Microphone
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const mics = devices.filter(d => d.kind === 'audioinput');
+                if (mics.length > 0 && mics[0].label) {
+                    document.getElementById('micInfo').textContent = mics[0].label;
+                } else {
+                    document.getElementById('micInfo').textContent = 'Default Microphone';
+                }
+            } catch (e) {
+                document.getElementById('micInfo').textContent = 'Permission Required';
+            }
+        }
+
+        // Load YAMNet model
+        async function loadModel() {
+            const statusEl = document.getElementById('modelStatus');
+            const recordBtn = document.getElementById('recordBtn');
+
+            try {
+                // Load YAMNet model from TensorFlow Hub
+                yamnetModel = await tf.loadGraphModel(
+                    'https://tfhub.dev/google/tfjs-model/yamnet/tfjs/1',
+                    { fromTFHub: true }
+                );
+
+                // Load class names
+                const response = await fetch(
+                    'https://raw.githubusercontent.com/tensorflow/models/master/research/audioset/yamnet/yamnet_class_map.csv'
+                );
+                const csvText = await response.text();
+                const lines = csvText.split('\n');
+
+                for (let i = 1; i < lines.length; i++) {
+                    const parts = lines[i].split(',');
+                    if (parts.length >= 3) {
+                        const index = parseInt(parts[0]);
+                        const displayName = parts[2].replace(/"/g, '').trim();
+                        classNames[index] = displayName;
+                    }
+                }
+
+                statusEl.className = 'status success';
+                statusEl.textContent = 'Model loaded successfully!';
+                recordBtn.disabled = false;
+                recordBtn.textContent = 'Start Recording';
+
+            } catch (error) {
+                console.error('Error loading model:', error);
+                statusEl.className = 'status error';
+                statusEl.textContent = 'Error loading model: ' + error.message;
+            }
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            document.getElementById('taskSelect').addEventListener('change', updateExpectedSounds);
+            document.getElementById('recordBtn').addEventListener('click', toggleRecording);
+            document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+        }
+
+        // Update expected sounds list
+        function updateExpectedSounds() {
+            const task = document.getElementById('taskSelect').value;
+            const sounds = TASK_CLASSES[task];
+            const ul = document.getElementById('expectedSounds');
+            ul.innerHTML = sounds.map(s => `<li>${s}</li>`).join('');
+        }
+
+        // Toggle recording
+        async function toggleRecording() {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                await startRecording();
+            }
+        }
+
+        // Start recording
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+
+                    // Show audio player with recorded audio
+                    const audioPlayer = document.getElementById('audioPlayer');
+                    audioPlayer.src = URL.createObjectURL(audioBlob);
+                    audioPlayer.classList.remove('hidden');
+
+                    await analyzeAudio(audioBlob);
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.start();
+                isRecording = true;
+                recordingStartTime = Date.now();
+
+                const recordBtn = document.getElementById('recordBtn');
+                recordBtn.className = 'record-btn recording';
+                recordBtn.textContent = 'Stop Recording';
+
+                document.getElementById('recordingTime').classList.remove('hidden');
+                timerInterval = setInterval(updateTimer, 100);
+
+                // Re-detect microphone after permission granted
+                detectDeviceInfo();
+
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                alert('Could not access microphone. Please grant permission.');
+            }
+        }
+
+        // Stop recording
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+
+                const recordBtn = document.getElementById('recordBtn');
+                recordBtn.className = 'record-btn ready';
+                recordBtn.textContent = 'Start Recording';
+
+                clearInterval(timerInterval);
+                document.getElementById('recordingTime').classList.add('hidden');
+            }
+        }
+
+        // Update timer display
+        function updateTimer() {
+            const elapsed = (Date.now() - recordingStartTime) / 1000;
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = Math.floor(elapsed % 60);
+            document.getElementById('timeDisplay').textContent =
+                `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        // Handle file upload
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const audioPlayer = document.getElementById('audioPlayer');
+                audioPlayer.src = URL.createObjectURL(file);
+                audioPlayer.classList.remove('hidden');
+                await analyzeAudio(file);
+            }
+        }
+
+        // Analyze audio
+        async function analyzeAudio(audioBlob) {
+            const resultsPlaceholder = document.getElementById('resultsPlaceholder');
+            const resultsContent = document.getElementById('resultsContent');
+
+            resultsPlaceholder.className = 'status loading';
+            resultsPlaceholder.textContent = 'Analyzing audio...';
+            resultsPlaceholder.classList.remove('hidden');
+            resultsContent.classList.add('hidden');
+
+            try {
+                // Decode audio
+                const arrayBuffer = await audioBlob.arrayBuffer();
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+                // Get mono channel
+                let waveform = audioBuffer.getChannelData(0);
+                const originalSampleRate = audioBuffer.sampleRate;
+
+                // Resample to 16kHz if needed
+                if (originalSampleRate !== YAMNET_SAMPLE_RATE) {
+                    waveform = resampleAudio(waveform, originalSampleRate, YAMNET_SAMPLE_RATE);
+                }
+
+                // Normalize (avoid spread operator for large arrays)
+                let maxVal = 0;
+                for (let i = 0; i < waveform.length; i++) {
+                    const absVal = Math.abs(waveform[i]);
+                    if (absVal > maxVal) maxVal = absVal;
+                }
+                if (maxVal > 0) {
+                    for (let i = 0; i < waveform.length; i++) {
+                        waveform[i] = waveform[i] / maxVal;
+                    }
+                }
+
+                const duration = waveform.length / YAMNET_SAMPLE_RATE;
+
+                if (duration < 0.5) {
+                    resultsPlaceholder.className = 'status error';
+                    resultsPlaceholder.textContent = 'Audio is too short. Please record at least 0.5 seconds.';
+                    return;
+                }
+
+                // Run YAMNet inference
+                const inputTensor = tf.tensor1d(waveform);
+                const [scores, embeddings, spectrogram] = yamnetModel.predict(inputTensor);
+                const scoresData = await scores.array();
+
+                // Calculate mean scores across frames
+                const meanScores = {};
+                const numClasses = scoresData[0].length;
+
+                for (let classIdx = 0; classIdx < numClasses; classIdx++) {
+                    let sum = 0;
+                    for (let frame = 0; frame < scoresData.length; frame++) {
+                        sum += scoresData[frame][classIdx];
+                    }
+                    const className = classNames[classIdx];
+                    if (className) {
+                        meanScores[className] = sum / scoresData.length;
+                    }
+                }
+
+                // Calculate metrics (using YAMNet for silence detection)
+                const silencePercent = getSilenceFromYamnet(meanScores);
+                const [noiseLevel, noiseScore] = calculateNoiseLevel(meanScores);
+                const task = document.getElementById('taskSelect').value;
+                const [taskDetected, taskConfidence, detectedClasses] = checkTaskAudio(meanScores, task);
+                const topPredictions = getTopPredictions(meanScores, 10);
+
+                // Frame-by-frame analysis
+                const frameAnalysis = analyzeFrames(scoresData, task);
+
+                // Display results
+                displayResults({
+                    duration,
+                    sampleRate: YAMNET_SAMPLE_RATE,
+                    task,
+                    taskDetected,
+                    taskConfidence,
+                    detectedClasses,
+                    noiseLevel,
+                    noiseScore,
+                    silencePercent,
+                    topPredictions,
+                    frameAnalysis
+                });
+
+                // Cleanup tensors
+                inputTensor.dispose();
+                scores.dispose();
+                embeddings.dispose();
+                spectrogram.dispose();
+
+            } catch (error) {
+                console.error('Error analyzing audio:', error);
+                resultsPlaceholder.className = 'status error';
+                resultsPlaceholder.textContent = 'Error analyzing audio: ' + error.message;
+            }
+        }
+
+        // Simple resampling (linear interpolation)
+        function resampleAudio(data, fromRate, toRate) {
+            const ratio = fromRate / toRate;
+            const newLength = Math.round(data.length / ratio);
+            const result = new Float32Array(newLength);
+
+            for (let i = 0; i < newLength; i++) {
+                const position = i * ratio;
+                const index = Math.floor(position);
+                const fraction = position - index;
+
+                if (index + 1 < data.length) {
+                    result[i] = data[index] * (1 - fraction) + data[index + 1] * fraction;
+                } else {
+                    result[i] = data[index];
+                }
+            }
+
+            return result;
+        }
+
+        // Get silence percentage from YAMNet results
+        function getSilenceFromYamnet(results) {
+            // YAMNet has a "Silence" class - use its confidence
+            const silenceScore = results["Silence"] || 0;
+            return silenceScore * 100;
+        }
+
+        // Analyze frames for overlapping sounds and purity
+        function analyzeFrames(scoresData, task) {
+            const taskClassNames = TASK_CLASSES[task] || [];
+            const frames = [];
+            const overlappingSounds = {};
+            let framesWithTask = 0;
+            let pureTaskFrames = 0;
+            const threshold = 0.1; // Minimum score to consider a sound detected
+
+            for (let frameIdx = 0; frameIdx < scoresData.length; frameIdx++) {
+                const frameScores = scoresData[frameIdx];
+                const frameSounds = [];
+                let hasTaskSound = false;
+                let hasNonTaskSound = false;
+
+                // Get all sounds above threshold for this frame
+                for (let classIdx = 0; classIdx < frameScores.length; classIdx++) {
+                    const score = frameScores[classIdx];
+                    const className = classNames[classIdx];
+
+                    if (className && score > threshold) {
+                        const isTaskSound = taskClassNames.includes(className);
+                        frameSounds.push({
+                            name: className,
+                            score: score,
+                            isTaskSound: isTaskSound
+                        });
+
+                        if (isTaskSound) {
+                            hasTaskSound = true;
+                        } else if (!NOISE_CLASSES.includes(className) && className !== "Silence") {
+                            hasNonTaskSound = true;
+                            // Track overlapping sounds
+                            if (hasTaskSound || framesWithTask > 0) {
+                                overlappingSounds[className] = (overlappingSounds[className] || 0) + 1;
+                            }
+                        }
+                    }
+                }
+
+                // Sort by score
+                frameSounds.sort((a, b) => b.score - a.score);
+
+                if (hasTaskSound) {
+                    framesWithTask++;
+                    if (!hasNonTaskSound) {
+                        pureTaskFrames++;
+                    }
+                }
+
+                frames.push({
+                    index: frameIdx,
+                    sounds: frameSounds.slice(0, 5), // Top 5 per frame
+                    hasTaskSound: hasTaskSound
+                });
+            }
+
+            // Calculate purity score
+            const purityScore = framesWithTask > 0
+                ? (pureTaskFrames / framesWithTask) * 100
+                : 0;
+
+            // Sort overlapping sounds by frequency
+            const sortedOverlaps = Object.entries(overlappingSounds)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            return {
+                frames: frames,
+                purityScore: purityScore,
+                framesWithTask: framesWithTask,
+                totalFrames: scoresData.length,
+                overlappingSounds: sortedOverlaps
+            };
+        }
+
+        // Calculate noise level
+        function calculateNoiseLevel(results) {
+            const noiseScores = [];
+
+            for (const noiseClass of NOISE_CLASSES) {
+                if (results[noiseClass] !== undefined) {
+                    noiseScores.push(results[noiseClass]);
+                }
+            }
+
+            if (noiseScores.length === 0) {
+                return ["Unknown", 0];
+            }
+
+            let maxNoiseScore = 0;
+            for (let i = 0; i < noiseScores.length; i++) {
+                if (noiseScores[i] > maxNoiseScore) maxNoiseScore = noiseScores[i];
+            }
+
+            if (maxNoiseScore > 0.5) return ["High", maxNoiseScore];
+            if (maxNoiseScore > 0.2) return ["Medium", maxNoiseScore];
+            if (maxNoiseScore > 0.05) return ["Low", maxNoiseScore];
+            return ["Minimal", maxNoiseScore];
+        }
+
+        // Check if task audio is detected
+        function checkTaskAudio(results, task) {
+            const taskClassNames = TASK_CLASSES[task] || [];
+            const detectedClasses = [];
+            let maxConfidence = 0;
+
+            for (const className of taskClassNames) {
+                if (results[className] !== undefined) {
+                    const score = results[className];
+                    if (score > 0.1) {
+                        detectedClasses.push([className, score]);
+                    }
+                    if (score > maxConfidence) {
+                        maxConfidence = score;
+                    }
+                }
+            }
+
+            detectedClasses.sort((a, b) => b[1] - a[1]);
+            const detected = maxConfidence > 0.15;
+
+            return [detected, maxConfidence, detectedClasses];
+        }
+
+        // Get top predictions
+        function getTopPredictions(results, topK = 10) {
+            const sorted = Object.entries(results).sort((a, b) => b[1] - a[1]);
+            return sorted.slice(0, topK);
+        }
+
+        // Display results
+        function displayResults(data) {
+            const resultsPlaceholder = document.getElementById('resultsPlaceholder');
+            const resultsContent = document.getElementById('resultsContent');
+
+            resultsPlaceholder.classList.add('hidden');
+            resultsContent.classList.remove('hidden');
+
+            // Audio info
+            document.getElementById('duration').textContent = data.duration.toFixed(2);
+            document.getElementById('sampleRate').textContent = data.sampleRate;
+
+            // Task detection
+            document.getElementById('taskName').textContent = data.task;
+            const detectionResult = document.getElementById('detectionResult');
+            const detectionText = document.getElementById('detectionText');
+
+            if (data.taskDetected) {
+                detectionResult.className = 'detection-result detected';
+                detectionText.innerHTML = `<strong>${data.task} sound DETECTED!</strong>`;
+                document.getElementById('confidence').textContent = (data.taskConfidence * 100).toFixed(1) + '%';
+
+                const detectedSoundsHtml = data.detectedClasses.slice(0, 5).map(([name, score]) =>
+                    `<div class="sound-item">
+                        <span class="name">${name}</span>
+                        <div class="bar"><div class="bar-fill" style="width: ${score * 100}%"></div></div>
+                        <span class="score">${(score * 100).toFixed(1)}%</span>
+                    </div>`
+                ).join('');
+                document.getElementById('detectedSounds').innerHTML = detectedSoundsHtml;
+            } else {
+                detectionResult.className = 'detection-result not-detected';
+                detectionText.innerHTML = `<strong>${data.task} sound NOT detected</strong><br>
+                    The audio doesn't contain the expected sound.<br>
+                    <em>Tip: Make sure you're recording the correct audio type.</em>`;
+                document.getElementById('confidence').textContent = '--';
+                document.getElementById('detectedSounds').innerHTML = '';
+            }
+
+            // Task Purity
+            const fa = data.frameAnalysis;
+            const purityEl = document.getElementById('purityScore');
+            purityEl.textContent = fa.purityScore.toFixed(1) + '%';
+            if (fa.purityScore >= 80) {
+                purityEl.className = 'metric-value purity-good';
+            } else if (fa.purityScore >= 50) {
+                purityEl.className = 'metric-value purity-medium';
+            } else {
+                purityEl.className = 'metric-value purity-poor';
+            }
+
+            document.getElementById('taskFrames').textContent =
+                `${fa.framesWithTask} / ${fa.totalFrames}`;
+
+            document.getElementById('purityExplanation').innerHTML =
+                `<p style="color: #666; font-size: 0.9rem; margin-top: 8px;">
+                    ${fa.purityScore.toFixed(1)}% of frames with ${data.task} audio contain only task-related sounds.
+                </p>`;
+
+            // Overlapping Sounds
+            const overlapsEl = document.getElementById('overlappingSounds');
+            if (fa.overlappingSounds.length > 0) {
+                overlapsEl.innerHTML = fa.overlappingSounds.map(([name, count]) =>
+                    `<div class="overlap-item">
+                        <span>${name}</span>
+                        <span>${count} frame${count > 1 ? 's' : ''}</span>
+                    </div>`
+                ).join('');
+            } else {
+                overlapsEl.innerHTML = '<div class="status success">No overlapping sounds detected - clean audio!</div>';
+            }
+
+            // Frame Timeline
+            const timelineEl = document.getElementById('frameTimeline');
+            const taskClassNames = TASK_CLASSES[data.task] || [];
+            timelineEl.innerHTML = fa.frames.map(frame => {
+                const soundTags = frame.sounds.map(s => {
+                    const tagClass = s.isTaskSound ? 'task-sound' : 'overlap-sound';
+                    return `<span class="frame-sound-tag ${tagClass}">${s.name} (${(s.score * 100).toFixed(0)}%)</span>`;
+                }).join('');
+                return `<div class="frame-row">
+                    <span class="frame-number">Frame ${frame.index + 1}</span>
+                    <div class="frame-sounds">${soundTags || '<span style="color:#999">No sounds detected</span>'}</div>
+                </div>`;
+            }).join('');
+
+            // Noise level
+            const noiseIndicators = {
+                "Minimal": "[OK]",
+                "Low": "[LOW]",
+                "Medium": "[MED]",
+                "High": "[HIGH]",
+                "Unknown": "[?]"
+            };
+            document.getElementById('noiseLevel').innerHTML =
+                `<strong>Noise Level:</strong> ${noiseIndicators[data.noiseLevel]} ${data.noiseLevel}`;
+
+            const noiseBar = document.getElementById('noiseBar');
+            noiseBar.style.width = (data.noiseScore * 100) + '%';
+            noiseBar.className = data.noiseLevel === 'High' || data.noiseLevel === 'Medium'
+                ? 'progress-fill warning' : 'progress-fill';
+
+            const noiseWarning = document.getElementById('noiseWarning');
+            if (data.noiseLevel === 'High' || data.noiseLevel === 'Medium') {
+                noiseWarning.classList.remove('hidden');
+                noiseWarning.className = 'status error';
+                noiseWarning.textContent = 'Consider recording in a quieter environment';
+            } else {
+                noiseWarning.classList.add('hidden');
+            }
+
+            // Silence
+            document.getElementById('silencePercent').textContent = data.silencePercent.toFixed(1) + '%';
+            document.getElementById('silenceBar').style.width = data.silencePercent + '%';
+
+            const silenceStatus = document.getElementById('silenceStatus');
+            if (data.silencePercent > 70) {
+                silenceStatus.className = 'status error';
+                silenceStatus.textContent = 'Too much silence in the recording!';
+            } else if (data.silencePercent > 50) {
+                silenceStatus.className = 'status loading';
+                silenceStatus.textContent = 'Recording has significant silence';
+            } else {
+                silenceStatus.className = 'status success';
+                silenceStatus.textContent = 'Good audio activity level';
+            }
+
+            // Pie chart
+            const labels = data.topPredictions.map(p => p[0]);
+            const values = data.topPredictions.map(p => p[1]);
+
+            Plotly.newPlot('pieChart', [{
+                type: 'pie',
+                labels: labels,
+                values: values,
+                textposition: 'inside',
+                textinfo: 'percent+label',
+                hole: 0.3
+            }], {
+                title: 'Audio Class Distribution',
+                showlegend: false,
+                margin: { t: 40, b: 20, l: 20, r: 20 }
+            }, { responsive: true });
+
+            // Top sounds list
+            const topSoundsHtml = data.topPredictions.map(([name, score]) =>
+                `<div class="sound-item">
+                    <span class="name">${name}</span>
+                    <div class="bar"><div class="bar-fill" style="width: ${score * 100}%"></div></div>
+                    <span class="score">${(score * 100).toFixed(1)}%</span>
+                </div>`
+            ).join('');
+            document.getElementById('topSounds').innerHTML = topSoundsHtml;
+
+            // Overall assessment
+            const issues = [];
+            if (!data.taskDetected) {
+                issues.push(`${data.task} not detected in audio`);
+            }
+            if (data.noiseLevel === 'High' || data.noiseLevel === 'Medium') {
+                issues.push(`${data.noiseLevel} background noise`);
+            }
+            if (data.silencePercent > 50) {
+                issues.push(`High silence (${data.silencePercent.toFixed(1)}%)`);
+            }
+
+            const overallEl = document.getElementById('overallAssessment');
+            if (issues.length === 0) {
+                overallEl.className = 'status success';
+                overallEl.textContent = 'Audio quality is GOOD for the selected task!';
+            } else {
+                overallEl.innerHTML = `<div class="status error">Issues found:</div>
+                    <ul class="issues-list">${issues.map(i => `<li>${i}</li>`).join('')}</ul>`;
+            }
+        }
+    </script>
+</body>
+</html>
