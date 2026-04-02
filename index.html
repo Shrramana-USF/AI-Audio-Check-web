@@ -401,6 +401,10 @@
             <h2>Device Information</h2>
             <div class="device-info" id="deviceInfo">
                 <div class="device-item">
+                    <div class="label">Device Type</div>
+                    <div class="value" id="deviceType">Detecting...</div>
+                </div>
+                <div class="device-item">
                     <div class="label">Browser</div>
                     <div class="value" id="browserInfo">Detecting...</div>
                 </div>
@@ -567,6 +571,15 @@
         // Detect device information
         async function detectDeviceInfo() {
             const ua = navigator.userAgent;
+
+            // Device type detection
+            let deviceType = 'Desktop/Laptop';
+            if (/Mobi|Android.*Mobile|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) {
+                deviceType = 'Mobile';
+            } else if (/iPad|Android(?!.*Mobile)|Tablet|PlayBook|Silk/i.test(ua)) {
+                deviceType = 'Tablet';
+            }
+            document.getElementById('deviceType').textContent = deviceType;
 
             // Browser detection
             let browser = 'Unknown';
