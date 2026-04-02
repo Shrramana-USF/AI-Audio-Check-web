@@ -574,9 +574,19 @@
 
             // Device type detection
             let deviceType = 'Desktop/Laptop';
+            const isTouchDevice = navigator.maxTouchPoints > 0;
+            const screenWidth = window.innerWidth;
+
+            // Check for iPad (iPadOS 13+ reports as Macintosh)
+            const isIPad = /iPad/i.test(ua) ||
+                (navigator.platform === 'MacIntel' && isTouchDevice && navigator.maxTouchPoints > 1);
+
             if (/Mobi|Android.*Mobile|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) {
                 deviceType = 'Mobile';
-            } else if (/iPad|Android(?!.*Mobile)|Tablet|PlayBook|Silk/i.test(ua)) {
+            } else if (isIPad || /Android(?!.*Mobile)|Tablet|PlayBook|Silk/i.test(ua)) {
+                deviceType = 'Tablet';
+            } else if (isTouchDevice && screenWidth < 1024) {
+                // Fallback for other touch tablets
                 deviceType = 'Tablet';
             }
             document.getElementById('deviceType').textContent = deviceType;
