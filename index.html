@@ -501,7 +501,7 @@
                         <div class="metrics-grid">
                             <div class="metric">
                                 <div class="metric-value" id="confidence">--</div>
-                                <div class="metric-label">Confidence</div>
+                                <div class="metric-label">Task Presence (Combined)</div>
                             </div>
                         </div>
                         <div id="detectedSounds" class="sound-list"></div>
@@ -564,7 +564,7 @@
             "Breathing": ["Breathing", "Wheeze", "Gasp", "Pant", "Snort", "Snoring"],
             "Cough": ["Cough", "Throat clearing", "Sneeze"],
             "Vowel": ["Speech", "Singing", "Humming", "Mantra", "Chant"],
-            "Speech": ["Speech", "Child speech, kid speaking", "Conversation", "Narration, monologue", "Whispering"]
+            "Speech": ["Speech", "Child speech, kid speaking", "Conversation", "Narration, monologue", "Whispering","Narration"]
         };
 
         const NOISE_CLASSES = [
@@ -1042,24 +1042,18 @@
         function checkTaskAudio(results, task) {
             const taskClassNames = TASK_CLASSES[task] || [];
             const detectedClasses = [];
-            let maxConfidence = 0;
+            let totalScore = 0;  // Sum of all task-related class scores
 
             for (const className of taskClassNames) {
-                if (results[className] !== undefined) {
-                    const score = results[className];
-                    if (score > 0.1) {
-                        detectedClasses.push([className, score]);
-                    }
-                    if (score > maxConfidence) {
-                        maxConfidence = score;
-                    }
-                }
+                const score = results[className] || 0;
+                totalScore += score;  // Aggregate all task class scores
+                detectedClasses.push([className, score]);  // Include all classes (even 0)
             }
 
             detectedClasses.sort((a, b) => b[1] - a[1]);
-            const detected = maxConfidence > 0.15;
+            const detected = totalScore > 0.15;  // Detection based on aggregate
 
-            return [detected, maxConfidence, detectedClasses];
+            return [detected, totalScore, detectedClasses];
         }
 
         // Get top predictions
@@ -1090,14 +1084,19 @@
                 detectionText.innerHTML = `<strong>${data.task} sound DETECTED!</strong>`;
                 document.getElementById('confidence').textContent = (data.taskConfidence * 100).toFixed(1) + '%';
 
-                const detectedSoundsHtml = data.detectedClasses.slice(0, 5).map(([name, score]) =>
-                    `<div class="sound-item">
+                // Show breakdown of all task categories with their scores
+                const taskClasses = TASK_CLASSES[data.task] || [];
+                const breakdownHtml = taskClasses.map(name => {
+                    const found = data.detectedClasses.find(([n]) => n === name);
+                    const score = found ? found[1] : 0;
+                    return `<div class="sound-item">
                         <span class="name">${name}</span>
                         <div class="bar"><div class="bar-fill" style="width: ${score * 100}%"></div></div>
                         <span class="score">${(score * 100).toFixed(1)}%</span>
-                    </div>`
-                ).join('');
-                document.getElementById('detectedSounds').innerHTML = detectedSoundsHtml;
+                    </div>`;
+                }).join('');
+                document.getElementById('detectedSounds').innerHTML =
+                    `<div style="margin-bottom:8px;color:#666;font-size:0.9rem;"><strong>Combined from:</strong></div>` + breakdownHtml;
             } else {
                 detectionResult.className = 'detection-result not-detected';
                 detectionText.innerHTML = `<strong>${data.task} sound NOT detected</strong><br>
@@ -1197,21 +1196,26 @@
                 silenceStatus.textContent = 'Good audio activity level';
             }
 
-            // Pie chart
+            // Bar chart with raw scores
             const labels = data.topPredictions.map(p => p[0]);
-            const values = data.topPredictions.map(p => p[1]);
+            const values = data.topPredictions.map(p => p[1] * 100);  // Convert to percentage
 
             Plotly.newPlot('pieChart', [{
-                type: 'pie',
-                labels: labels,
-                values: values,
-                textposition: 'inside',
-                textinfo: 'percent+label',
-                hole: 0.3
+                type: 'bar',
+                x: values,
+                y: labels,
+                orientation: 'h',
+                text: values.map(v => v.toFixed(1) + '%'),
+                textposition: 'outside',
+                marker: {
+                    color: 'rgba(102, 126, 234, 0.8)',
+                    line: { color: 'rgba(102, 126, 234, 1)', width: 1 }
+                }
             }], {
-                title: 'Audio Class Distribution',
-                showlegend: false,
-                margin: { t: 40, b: 20, l: 20, r: 20 }
+                title: 'Audio Class Distribution (Raw Scores)',
+                xaxis: { title: 'Score %', range: [0, Math.max(...values) * 1.2] },
+                yaxis: { automargin: true },
+                margin: { t: 40, b: 50, l: 150, r: 50 }
             }, { responsive: true });
 
             // Top sounds list
