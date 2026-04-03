@@ -434,6 +434,11 @@
                     <div class="label">Microphone</div>
                     <div class="value" id="micInfo">Detecting...</div>
                 </div>
+                <div class="device-item">
+                     <!-- (UA Client Hints) -->
+                    <div class="label">Platform</div>
+                    <div class="value" id="platformInfo">Detecting...</div>
+                </div>
             </div>
         </div>
 
@@ -647,6 +652,9 @@
 
             // CPU Cores
             document.getElementById('coresInfo').textContent = navigator.hardwareConcurrency || 'Unknown';
+
+            // Platform (User-Agent Client Hints API)
+            document.getElementById('platformInfo').textContent = navigator.userAgentData?.platform || 'Not supported';
 
             // Microphone
             try {
