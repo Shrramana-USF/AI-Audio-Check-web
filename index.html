@@ -572,7 +572,7 @@
             "Reverberation", "Echo", "White noise", "Pink noise"
         ];
 
-        const YAMNET_SAMPLE_RATE = 16000;
+        // const YAMNET_SAMPLE_RATE = 16000;
 
         let yamnetModel = null;
         let classNames = {};
@@ -882,7 +882,7 @@
                 // Display results
                 displayResults({
                     duration,
-                    sampleRate: YAMNET_SAMPLE_RATE,
+                    sampleRate: originalSampleRate,
                     task,
                     taskDetected,
                     taskConfidence,
